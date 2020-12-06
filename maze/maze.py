@@ -9,10 +9,6 @@ DIRECTIONS_TUPLES = {
     "R": (0, 1),
 }
 
-SAME_POINT_PENALTY = 3
-
-FILE_NAME = "maze.txt"
-
 
 class RouteStats:
     def __init__(self):
@@ -27,9 +23,6 @@ class Maze:
         self.obstacles = obstacles
         self.startPoint = start
         self.destinationPoint = destination
-
-    def load_maze(self):
-        return 0;
 
     def walk_maze(self, directions):
         currPoint = self.startPoint
@@ -88,6 +81,3 @@ distance = lambda pt1, pt2: abs(pt1[0] - pt2[0]) + abs(pt1[1] - pt2[1])
 def get_cords_in_lists(points):
     return [pt[0] for pt in points], \
            [pt[1] for pt in points]
-
-
-MAZE_SIZE = 50

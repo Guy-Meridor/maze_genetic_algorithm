@@ -18,6 +18,7 @@ ELITE_PCT = 0.1
 ELITE_COUNT = round(POPULATION_IN_GENERATION * ELITE_PCT)
 MUTATE_PCT = 0.2
 CROSSOVER_PCT = 0.95
+CONVERGENCE_GENERATIONS = 100
 
 class genetic_runner:
     def __init__(self, size, num_of_obstacles=0):
@@ -36,23 +37,7 @@ class genetic_runner:
         destination = sampled[1]
         obstacles = sampled[2:]
 
-        # obstacles = self.generate_obstacles()
-        # start = self.generate_legal_point(obstacles)
-        # destination = self.generate_legal_point(obstacles + [start])
         self.maze = Maze(size=self.size, start=start, destination=destination, obstacles=obstacles)
-
-    def generate_obstacles(self):
-        obstacles_x = random.sample(range(0, self.size - 1), self.num_of_obstacles)
-        obstacles_y = random.sample(range(0, self.size - 1), self.num_of_obstacles)
-        obstacles = [(obstacles_x[i], obstacles_y[i]) for i in range(self.num_of_obstacles)]
-        return obstacles
-
-    def generate_legal_point(self, illegal_points):
-        point = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
-        while point in illegal_points:
-            point = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
-
-        return point
 
     def run(self):
         result = self.run_generations()
@@ -106,7 +91,23 @@ class genetic_runner:
             population, fitness_array = self.generate_generation(population, fitness_array)
             self.data_tracking(population, fitness_array)
 
+            if self.check_if_convergence():
+                break
+
         return population[0]
+
+    def check_if_convergence(self):
+        if len(self.generation_max) <= CONVERGENCE_GENERATIONS:
+            return False
+        else:
+            last_generations_max = self.generation_max[-CONVERGENCE_GENERATIONS:]
+            firstMax = last_generations_max[0]
+            for mx in last_generations_max:
+                if mx != firstMax:
+                    return False
+
+            return True
+
 
     def initiate_population(self):
         population = random_population()
@@ -147,18 +148,6 @@ random_population = lambda: [random_chromosome() for i in range(POPULATION_IN_GE
 avg = lambda arr: sum(arr) / len(arr)
 
 
-def common_data(list1, list2):
-    # traverse in the 1st list
-    for i1 in range(len(list1)):
-
-        # traverse in the 2nd list
-        for i2 in range(len(list2)):
-
-            # if one common
-            if list1[i1] == list2[i2]:
-                return i1, i2
-
-    return None
 
 
 def list_intersects(a, b):
