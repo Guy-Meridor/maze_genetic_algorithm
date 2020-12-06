@@ -1,45 +1,69 @@
-from maze.maze import Maze, DIRECTIONS_SIGNS
+from maze.maze import Maze, DIRECTIONS_SIGNS, distance
 import random
 import numpy.random as npr
-import math
+import matplotlib.pyplot as plt
 
-MAZE_SIZE = 50
+MAZE_SIZE = 100
 GENERATIONS_NUM = 1000
 POPULATION_IN_GENERATION = 50
-OBSTACLES = False
-CHROMOSOME_SIZE = MAZE_SIZE ** 2 if OBSTACLES else 2 * (MAZE_SIZE - 1)
-REPEAT_COST = 10
+OBSTACLES = 400
+CHROMOSOME_SIZE = 2 * (MAZE_SIZE - 1)
+REPEAT_COST = 5
+STEP_COST = 5
 DISTANCE_LEFT_EXPONENTIAL = 2
 UNSOLVED_COST = 100
 
 # Generic params
-ELITE_PCT = 0.05
+ELITE_PCT = 0.1
 ELITE_COUNT = round(POPULATION_IN_GENERATION * ELITE_PCT)
-MUTATE_PCT = 0.1
+MUTATE_PCT = 0.2
 CROSSOVER_PCT = 0.95
 
-
 class genetic_runner:
-    def __init__(self):
-        self.create_maze(MAZE_SIZE)
+    def __init__(self, size, num_of_obstacles=0):
+        self.num_of_obstacles = num_of_obstacles
+        self.size = size
+        self.create_maze()
+        self.generation_min = []
+        self.generation_avg = []
+        self.generation_max = []
+        self.fitness_dict = {}
 
-    def create_maze(self, size):
-        # start = (random.randint(0, size), random.randint(0, size))
-        start = (size - 1, size - 1)
-        # destination = (random.randint(0, size), random.randint(0, size))
-        destination = (5, 5)
-        self.maze = Maze(size=size, start=start, destination=destination)
+    def create_maze(self):
+        allPoints = [(x, y) for x in range(self.size) for y in range(self.size)]
+        sampled = random.sample(allPoints, self.num_of_obstacles + 2)
+        start = sampled[0]
+        destination = sampled[1]
+        obstacles = sampled[2:]
+
+        # obstacles = self.generate_obstacles()
+        # start = self.generate_legal_point(obstacles)
+        # destination = self.generate_legal_point(obstacles + [start])
+        self.maze = Maze(size=self.size, start=start, destination=destination, obstacles=obstacles)
+
+    def generate_obstacles(self):
+        obstacles_x = random.sample(range(0, self.size - 1), self.num_of_obstacles)
+        obstacles_y = random.sample(range(0, self.size - 1), self.num_of_obstacles)
+        obstacles = [(obstacles_x[i], obstacles_y[i]) for i in range(self.num_of_obstacles)]
+        return obstacles
+
+    def generate_legal_point(self, illegal_points):
+        point = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
+        while point in illegal_points:
+            point = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
+
+        return point
 
     def run(self):
         result = self.run_generations()
         return result
 
     def fitness_value(self, chromosome):
-        stats = self.maze.walk_maze(chromosome)
-        cost = stats.steps + \
+        stats = self.maze.walk_maze(chromosome)[0]
+        cost = stats.steps * STEP_COST + \
                REPEAT_COST * stats.repeats + \
                stats.disFromDest ** DISTANCE_LEFT_EXPONENTIAL + \
-               (UNSOLVED_COST if not stats.solved else 0)
+               (0 if stats.disFromDest == 0 else UNSOLVED_COST)
 
         return 1 / cost
 
@@ -53,15 +77,12 @@ class genetic_runner:
         mutation = chromosome[:mutate_point] + random_gene() + chromosome[mutate_point + 1:]
         return mutation
 
-    def generate_generation(self, population):
-
-        fitness_array = [self.fitness_value(chromosome) for chromosome in population]
+    def generate_generation(self, population, fitness_array):
         total_fitness = sum(fitness_array)
         roulette_array = [fitness / total_fitness for fitness in fitness_array]
-
         next_population = population[:ELITE_COUNT]
-        population_to_create = POPULATION_IN_GENERATION - ELITE_COUNT
-        for i in range(math.ceil(population_to_create / 2)):
+
+        while len(next_population) < POPULATION_IN_GENERATION:
             c1, c2 = npr.choice(population, 2, p=roulette_array)
             if random.random() < CROSSOVER_PCT:
                 c1, c2 = self.crossover(c1, c2)
@@ -71,26 +92,50 @@ class genetic_runner:
 
             next_population.extend([c1, c2])
 
-        next_population.sort(key=lambda x: self.fitness_value(x), reverse=True)
-        return next_population
+        # next_population, next_fitness_array = self.create_fitness_array_and_sort_population(population)
+        self.update_fitness_dict(next_population)
+        next_population.sort(key=lambda x: self.fitness_dict[x], reverse=True)
+        next_fitness_array = [self.fitness_dict[x] for x in next_population]
+        return (next_population, next_fitness_array)
 
     def run_generations(self):
-        population = self.initiate_population()
-        self.data_tracking(population)
+        population, fitness_array = self.initiate_population()
+        self.data_tracking(population, fitness_array)
 
         for generation in range(GENERATIONS_NUM):
-            population = self.generate_generation(population)
-            self.data_tracking(population)
+            population, fitness_array = self.generate_generation(population, fitness_array)
+            self.data_tracking(population, fitness_array)
 
         return population[0]
 
     def initiate_population(self):
         population = random_population()
-        population.sort(key=lambda x: self.fitness_value(x), reverse=True)
-        return population
+        self.update_fitness_dict(population)
+        fitness_array = [self.fitness_dict[x] for x in population]
+        return (population, fitness_array)
 
-    def data_tracking(self, generation):
+    def data_tracking(self, generation, fitness_array):
         print(generation[0])
+        self.generation_max.append(fitness_array[0])
+        self.generation_avg.append(avg(fitness_array))
+        self.generation_min.append(fitness_array[POPULATION_IN_GENERATION - 1])
+
+    def update_fitness_dict(self, population):
+        for chromosome in population:
+            if chromosome not in self.fitness_dict:
+                self.fitness_dict[chromosome] = self.fitness_value(chromosome)
+
+
+    def showGraphs(self):
+        # plotting the line 1 points
+        plt.plot(self.generation_min, label="minimum fitness")
+        plt.plot(self.generation_avg, label="average fitness")
+        plt.plot(self.generation_max, label="maximum fitness")
+        plt.xlabel('x - generation number')
+        plt.ylabel('y - fitness')
+        plt.title('fitness of chromosomes in {} generations'.format(GENERATIONS_NUM))
+        plt.legend()
+        plt.figure()
 
 
 random_gene = lambda: random.choice(DIRECTIONS_SIGNS)
@@ -99,7 +144,37 @@ random_chromosome = lambda: "".join([random_gene() for i in range(CHROMOSOME_SIZ
 
 random_population = lambda: [random_chromosome() for i in range(POPULATION_IN_GENERATION)]
 
+avg = lambda arr: sum(arr) / len(arr)
+
+
+def common_data(list1, list2):
+    # traverse in the 1st list
+    for i1 in range(len(list1)):
+
+        # traverse in the 2nd list
+        for i2 in range(len(list2)):
+
+            # if one common
+            if list1[i1] == list2[i2]:
+                return i1, i2
+
+    return None
+
+
+def list_intersects(a, b):
+    a_set = set(a)
+    b_set = set(b)
+    return len(a_set.intersection(b_set)) > 0
+
+
 if __name__ == "__main__":
-    runner = genetic_runner()
+    runner = genetic_runner(MAZE_SIZE, OBSTACLES)
     result = runner.run()
+
+    distance = distance(runner.maze.startPoint, runner.maze.destinationPoint) * STEP_COST
+    print(runner.maze.startPoint, runner.maze.destinationPoint,
+          distance, 1 / distance)
     print(result)
+    print(runner.fitness_value(result))
+    runner.showGraphs()
+    runner.maze.drawPath(result)
